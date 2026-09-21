@@ -3,14 +3,7 @@ import { luminanceHistogram } from '../color/analyze';
 import { computeLightLevels } from '../color/convert';
 import { downscaleToFit } from '../color/resize';
 import { SDR_WHITE_NITS } from '../color/transfer';
-import { generatePattern } from '../generate/patterns';
-import {
-  exportHdrPng,
-  exportImage,
-  exportSdrPng,
-  PREVIEW_ENCODING,
-  type ExportFormat,
-} from '../io/export';
+import { exportHdrPng, exportImage, PREVIEW_ENCODING, type ExportFormat } from '../io/export';
 import { loadImage } from '../io/load';
 import type { ProfileLoader } from '../io/profiles';
 import type { ImageF32 } from '../types';
@@ -27,10 +20,8 @@ interface StoredFile {
 
 /** The images of the latest render, kept for the pixel inspector. */
 interface LastRender {
-  original?: ImageF32;
+  original: ImageF32;
   hdr: ImageF32;
-  sdr: Uint8Array;
-  sdrChannels: 3 | 4;
 }
 
 /** The image pipeline behind the UI. It owns the pixels of every loaded file and normally lives in a worker. */
@@ -61,44 +52,19 @@ export class Pipeline {
   }
 
   async render(source: Source): Promise<RenderResult> {
-    const [hdrProfile, sdrProfile] = await Promise.all([
-      this.loadProfile('hdr'),
-      this.loadProfile('sdr'),
-    ]);
+    const profile = await this.loadProfile('hdr');
     const started = performance.now();
-    let original: ImageF32 | undefined;
-    let image: ImageF32;
-    let fullWidth: number;
-    let fullHeight: number;
-    let whiteNits = SDR_WHITE_NITS;
-    let clippedPixels = 0;
+    const { full, preview } = this.file(source.id);
+    const { image, clippedPixels } = applyAdjustments(preview, source.adjustments);
 
-    if (source.kind === 'pattern') {
-      const full = generatePattern(source.spec, source.width, source.height);
-      image = downscaleToFit(full, PREVIEW_MAX_SIDE);
-      fullWidth = full.width;
-      fullHeight = full.height;
-    } else {
-      const { full, preview } = this.file(source.id);
-      const adjusted = applyAdjustments(preview, source.adjustments);
-      original = preview;
-      image = adjusted.image;
-      clippedPixels = adjusted.clippedPixels;
-      whiteNits = source.adjustments.whiteNits;
-      fullWidth = full.width;
-      fullHeight = full.height;
-    }
-
-    const hdr = exportHdrPng(image, hdrProfile, PREVIEW_ENCODING);
-    const sdr = exportSdrPng(image, sdrProfile, whiteNits, PREVIEW_ENCODING);
-    this.lastRender = { original, hdr: image, sdr: sdr.pixels, sdrChannels: sdr.channels };
+    const hdr = exportHdrPng(image, profile, PREVIEW_ENCODING);
+    this.lastRender = { original: preview, hdr: image };
     return {
       hdrPng: hdr.bytes,
-      sdrPng: sdr.bytes,
       width: image.width,
       height: image.height,
-      fullWidth,
-      fullHeight,
+      fullWidth: full.width,
+      fullHeight: full.height,
       lightLevels: hdr.lightLevels,
       clippedFraction: clippedPixels / (image.width * image.height),
       histogram: luminanceHistogram(image.data),
@@ -106,20 +72,19 @@ export class Pipeline {
     };
   }
 
-  /** Reads one pixel of the last render from each of the images the UI shows. */
+  /** Reads one pixel of the last render from both images the UI shows. */
   inspect(x: number, y: number): InspectResult | undefined {
     const last = this.lastRender;
     if (!last || x < 0 || y < 0 || x >= last.hdr.width || y >= last.hdr.height) return undefined;
     const pixel = y * last.hdr.width + x;
-    const rgb = (data: ArrayLike<number>, channels: number): [number, number, number] => [
-      data[pixel * channels],
-      data[pixel * channels + 1],
-      data[pixel * channels + 2],
+    const rgb = (data: Float32Array): [number, number, number] => [
+      data[pixel * 4],
+      data[pixel * 4 + 1],
+      data[pixel * 4 + 2],
     ];
     return {
-      original: last.original && rgb(last.original.data, 4),
-      hdr: rgb(last.hdr.data, 4),
-      sdr: rgb(last.sdr, last.sdrChannels),
+      original: rgb(last.original.data),
+      hdr: rgb(last.hdr.data),
     };
   }
 
@@ -129,11 +94,13 @@ export class Pipeline {
     onProgress?: (fraction: number) => void | Promise<void>,
   ): Promise<ExportedFile> {
     const profile = await this.loadProfile(format);
-    const request =
-      source.kind === 'pattern'
-        ? { source: generatePattern(source.spec, source.width, source.height) }
-        : { source: this.file(source.id).full, adjustments: source.adjustments };
-    const { bytes, lightLevels } = await exportImage({ ...request, format, profile, onProgress });
+    const { bytes, lightLevels } = await exportImage({
+      source: this.file(source.id).full,
+      adjustments: source.adjustments,
+      format,
+      profile,
+      onProgress,
+    });
     return { bytes, lightLevels };
   }
 }

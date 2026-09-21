@@ -37,7 +37,7 @@ async function handle(
       // every render produces fresh buffers, so they can be handed over instead of copied
       return {
         result,
-        transfer: [result.hdrPng.buffer, result.sdrPng.buffer, result.histogram.buffer],
+        transfer: [result.hdrPng.buffer, result.histogram.buffer],
       };
     }
     case 'inspect':

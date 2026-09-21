@@ -1,3 +1,63 @@
-/* You can add global styles to this file, and also import other style files */
-
 @import 'tailwindcss';
+
+@theme {
+  --color-page: #111214;
+  --color-panel: #1b1d21;
+  --color-line: #2e3138;
+  --color-ink: #e8e9ec;
+  --color-muted: #9aa0ab;
+  --color-accent: #4c8dff;
+  --color-ok: #3ecf8e;
+  --color-peak: #ffb224;
+  --color-warn: #f0c254;
+  --color-warn-line: #a67c1a;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--color-page);
+  color: var(--color-ink);
+  font-family: system-ui, sans-serif;
+}
+
+/* Keyboard focus must be visible on every control (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .panel {
+    @apply flex flex-col gap-4 rounded-lg border border-line bg-panel p-5;
+  }
+
+  .panel-title {
+    @apply m-0 text-base font-semibold;
+  }
+
+  .hint {
+    @apply m-0 text-xs leading-relaxed text-muted;
+  }
+
+  .warning {
+    @apply m-0 rounded border border-warn-line px-3 py-2 text-xs text-warn;
+  }
+
+  .btn {
+    @apply inline-block cursor-pointer rounded px-4 py-2 text-center text-sm font-semibold no-underline;
+    @apply disabled:cursor-default disabled:opacity-50;
+  }
+
+  /* Dark text on the accent color: white would only reach a contrast of 3.3:1. */
+  .btn-primary {
+    @apply bg-accent text-page;
+  }
+
+  .btn-secondary {
+    @apply border border-line bg-transparent font-normal text-muted;
+  }
+}

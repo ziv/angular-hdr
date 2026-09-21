@@ -154,14 +154,12 @@ describe('exportImage', () => {
 });
 
 describe('Pipeline', () => {
-  it('renders patterns with pixels, histogram and light levels', async () => {
+  it('renders an HDR preview with histogram and light levels', async () => {
     const pipeline = new Pipeline(loadProfile);
-    const source: Source = {
-      kind: 'pattern',
-      spec: { kind: 'comparison', peakNits: 1000 },
-      width: 4096,
-      height: 256,
-    };
+    const card = generatePattern({ kind: 'comparison', peakNits: 1000 }, 4096, 256);
+    await pipeline.load(1, 'card.png', exportHdrPng(card, profiles.hdr).bytes);
+    // a peak above the content, so nothing gets clamped
+    const source: Source = { id: 1, adjustments: { ...DEFAULT_ADJUSTMENTS, peakNits: 4000 } };
     expect(pipeline.inspect(0, 0)).toBeUndefined();
     const result = await pipeline.render(source);
     expect(result).toMatchObject({
@@ -171,30 +169,23 @@ describe('Pipeline', () => {
       fullHeight: 256,
       clippedFraction: 0,
     });
-    expect(result.lightLevels.maxCll).toBeCloseTo(1000, 1);
+    expect(result.lightLevels.maxCll).toBeCloseTo(1000, 0);
     expect(result.histogram.reduce((sum, count) => sum + count, 0)).toBe(2048 * 128);
 
-    // the same preview, once per output profile
     const hdr = decodePng(result.hdrPng);
-    const sdr = decodePng(result.sdrPng);
     expect(hdr).toMatchObject({
       width: 2048,
       height: 128,
       depth: 16,
       cicp: { primaries: 9, transfer: 16 },
     });
-    expect(sdr).toMatchObject({ width: 2048, height: 128, depth: 8, cicp: undefined });
     expect(identifyColorSpace({ icc: hdr.icc?.profile }).colorSpace).toBe('rec2100-pq');
-    expect(identifyColorSpace({ icc: sdr.icc?.profile }).colorSpace).toBe('srgb');
 
-    // a pattern has no original; the 1000 nit half is white in SDR, the 203 nit half is rolled off below it
     const bright = pipeline.inspect(2000, 5)!;
     const dim = pipeline.inspect(10, 5)!;
-    expect(bright.original).toBeUndefined();
-    expect(bright.hdr[0]).toBeCloseTo(1000, 1);
-    expect(bright.sdr).toEqual([255, 255, 255]);
-    expect(dim.hdr[1]).toBeCloseTo(203, 1);
-    expect(dim.sdr[0]).toBeLessThan(255);
+    expect(bright.original[0]).toBeCloseTo(1000, 0);
+    expect(bright.hdr[0]).toBeCloseTo(1000, 0);
+    expect(dim.hdr[1]).toBeCloseTo(203, 0);
     expect(pipeline.inspect(2048, 0)).toBeUndefined();
     expect(pipeline.inspect(0, -1)).toBeUndefined();
   });
@@ -215,7 +206,6 @@ describe('Pipeline', () => {
     expect(sourceLevels.maxCll).toBeLessThanOrEqual(203);
 
     const source: Source = {
-      kind: 'file',
       id: 7,
       adjustments: { ...DEFAULT_ADJUSTMENTS, boost: true, peakNits: 1000 },
     };
@@ -223,15 +213,14 @@ describe('Pipeline', () => {
     expect(adjusted.lightLevels.maxCll).toBeGreaterThan(900);
     expect(adjusted.lightLevels.maxCll).toBeLessThanOrEqual(1000);
 
-    // bottom right is the brightest highlight: the original stays SDR, the HDR output is far brighter, the SDR output is back at white
+    // bottom right is the brightest highlight: the original stays SDR, the HDR output is far brighter
     const bottomRight = 30 * 40 - 1;
     const pixel = pipeline.inspect(39, 29)!;
-    expect(Math.max(...pixel.original!)).toBeLessThanOrEqual(203.01);
-    expect(pixel.hdr[0]).toBeGreaterThan(pixel.original![0] * 3);
-    expect(pixel.sdr[0]).toBe(255);
+    expect(Math.max(...pixel.original)).toBeLessThanOrEqual(203.01);
+    expect(pixel.hdr[0]).toBeGreaterThan(pixel.original[0] * 3);
     // a shadow is untouched by the boost
     const shadow = pipeline.inspect(2, 3)!;
-    expect(shadow.hdr[0]).toBeCloseTo(shadow.original![0], 3);
+    expect(shadow.hdr[0]).toBeCloseTo(shadow.original[0], 3);
 
     const hdr = await pipeline.export(source, 'hdr');
     expect(decodePng(hdr.bytes)).toMatchObject({ width: 40, height: 30, depth: 16 });

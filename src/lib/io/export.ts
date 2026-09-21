@@ -74,36 +74,6 @@ export function exportHdrPng(
   return { bytes, lightLevels };
 }
 
-export interface SdrPngExport {
-  bytes: Uint8Array<ArrayBuffer>;
-  /** The tone mapped 8-bit sRGB samples that were encoded. */
-  pixels: Uint8Array;
-  channels: 3 | 4;
-}
-
-/** Working image → tone mapped 8-bit sRGB PNG in one go; the SDR counterpart of `exportHdrPng`. */
-export function exportSdrPng(
-  image: ImageF32,
-  profile: IccProfile,
-  whiteNits: number,
-  encoding: Pick<PngLayout, 'compressionLevel' | 'filter'> = {},
-): SdrPngExport {
-  const channels = hasTransparency(image.data) ? 4 : 3;
-  const pixels = toneMapToSrgb8(image.data, channels, {
-    whiteNits,
-    sourcePeakNits: srgbPeakNits(image.data),
-  });
-  const encoder = new PngEncoder({
-    width: image.width,
-    height: image.height,
-    channels,
-    depth: 8,
-    ...encoding,
-  });
-  encoder.writeRows(pixels);
-  return { bytes: encoder.finish([iccpChunk(profile)]), pixels, channels };
-}
-
 /**
  * Full resolution export. The image is adjusted and encoded band by band, so besides the source
  * only one band is alive at any time. A first pass measures the light levels, which the
