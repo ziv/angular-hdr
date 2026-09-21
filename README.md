@@ -6,13 +6,12 @@ leaves the machine.
 - The app opens with a default image (`public/default.jpeg`); **open**, **drop** or **paste** PNG and JPEG files to
   add your own. sRGB, Display P3 and Rec.2100 PQ sources are recognized, anything else is color-managed by the
   browser.
-- The viewer always shows three images side by side: the **original** file, the **HDR** output (Rec.2100 PQ with
-  `rec2100-pq.icc`) and the **SDR** output (tone mapped sRGB with `sRGB-v4.icc`). Hovering any of them reads the
-  same pixel from all three.
+- The viewer shows two images side by side: the **original** file and the **HDR** output (Rec.2100 PQ with
+  `rec2100-pq.icc`). Hovering either of them reads the same pixel from both.
 - **Convert** with SDR white level, exposure, highlight boost (inverse tone mapping up to a chosen peak), color
   expansion toward BT.2020 and a hue-preserving peak clamp. A log-luminance histogram shows the HDR output.
-- **Download** any of the three with the button below it. HDR and SDR downloads are encoded at full resolution in a
-  web worker; the button shows the progress and cancels on a second click.
+- **Download** either one with the button below it. The HDR download is encoded at full resolution in a web worker;
+  the button shows the progress and cancels on a second click.
 
 ## Requirements
 
@@ -55,9 +54,9 @@ npx ng build --base-href /some/path/   # when hosting below a sub-path
 - **Signal Forms.** The adjust panel is `form(workspace.adjustments, schema)`; the sliders are a custom control
   (`SliderField`, a `FormValueControl<number>`) bound with `[formField]`, and the schema disables "Boost starts at"
   while the boost is off.
-- **The previews are real files.** The HDR and SDR images are PNGs made by the same encoders as the downloads, each
-  with its profile embedded, and rendered by the browser; the original is the opened file itself. Previews are
-  encoded at reduced resolution without filtering or compression, which keeps slider changes fast.
+- **The preview is a real file.** The HDR image is a PNG made by the same encoder as the download, with the profile
+  embedded, and rendered by the browser; the original is the opened file itself. The preview is encoded at reduced
+  resolution without filtering or compression, which keeps slider changes fast.
 - The worker fetches the ICC profiles itself. A relative URL inside a worker resolves against the worker script, so
   the page passes `document.baseURI` in an `init` message; that is what makes sub-path hosting work.
 
@@ -78,9 +77,9 @@ the same information for software that only reads profiles. Pixels are absolute:
 luminance in nits, and SDR content is placed with its white at 203 nits (ITU-R BT.2408) unless the white level
 slider says otherwise.
 
-SDR exports are 8-bit sRGB PNGs with `sRGB-v4.icc` embedded. Highlights are rolled off with the ITU-R BT.2390 EETF,
-applied to the brightest sRGB channel so bright saturated colors keep their hue, and out-of-gamut colors are
-desaturated toward their own luminance.
+The engine in `src/lib` can also write tone mapped SDR files (8-bit sRGB PNG with `sRGB-v4.icc`, highlights rolled
+off with the ITU-R BT.2390 EETF on the brightest sRGB channel); it is covered by the specs, but the app no longer
+offers it: the viewer and the downloads are original and HDR only.
 
 Limits: 50 MP per image (a 24 MP image already needs about 400 MB as float data; a 24 MP HDR download takes
 several seconds). HLG and other HDR encodings are imported as SDR with a warning. 16-bit PNGs with exotic features
@@ -105,11 +104,11 @@ exiftool -a -G1 out-hdr.png                      # profile description, cICP
 ```
 
 By eye, on an HDR display: turn on **Boost highlights** — the bright parts of the HDR image must become clearly
-brighter than the same parts of the original and of the SDR image. Then open the downloaded file in Preview / Quick
-Look and in Safari.
+brighter than the same parts of the original. Then open the downloaded file in Preview / Quick Look and in
+Safari.
 
 ## Origin
 
 The engine in `src/lib` was ported from a framework-free Vite + TypeScript version of the tool; for the same input
 both produce byte-identical files. `public/rec2100-pq.icc` and `public/sRGB-v4.icc` were created by the repository
-owner. See [plans.md](plans.md) for the migration plan and its decisions.
+owner.
