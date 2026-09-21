@@ -1,16 +1,11 @@
-import { Component, signal } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
+import { Component } from '@angular/core';
 
 @Component({
-  imports: [RouterOutlet],
   selector: 'app-root',
-  styles: [],
   template: `
-    <h1>Hello, {{ title() }}</h1>
-
-    <router-outlet />
+    <header class="border-b border-neutral-800 px-6 py-4">
+      <h1 class="text-xl font-semibold">HDR Image Tool</h1>
+    </header>
   `,
 })
-export class App {
-  protected readonly title = signal('angular-hdr');
-}
+export class App {}
