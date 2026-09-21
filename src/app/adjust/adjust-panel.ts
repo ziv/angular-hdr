@@ -12,7 +12,7 @@ import { FileInfo } from './file-info';
   host: { class: 'panel' },
   template: `
     <h2 class="panel-title">Convert to HDR</h2>
-    @if (workspace.selectedFile(); as file) {
+    @if (workspace.file(); as file) {
       <app-file-info [file]="file" />
     }
 

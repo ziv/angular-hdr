@@ -5,12 +5,12 @@ import { PreviewStore } from '../state/preview-store';
 import { WorkspaceStore } from '../state/workspace-store';
 import { ImageFigure } from './image-figure';
 
-/** The selected file next to its HDR conversion, each with its download. */
+/** The image next to its HDR conversion, each with its download. */
 @Component({
   selector: 'app-viewer',
   imports: [ImageFigure, DownloadButton],
   template: `
-    @if (workspace.selectedFile(); as file) {
+    @if (workspace.file(); as file) {
       <section
         class="flex flex-col items-stretch gap-4 px-6 pt-6 lg:flex-row lg:items-start lg:justify-center"
         aria-label="Original image and HDR output"

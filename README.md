@@ -3,8 +3,8 @@
 A client-side Angular app that turns images into **true HDR files**. Everything runs in the browser; no file ever
 leaves the machine.
 
-- The app opens with a default image (`public/default.jpeg`); **open**, **drop** or **paste** PNG and JPEG files to
-  add your own. sRGB, Display P3 and Rec.2100 PQ sources are recognized, anything else is color-managed by the
+- The app works on **one image**. It opens with a default image (`public/default.jpeg`); **open**, **drop** or
+  **paste** a PNG or JPEG file to replace it (if the new file cannot be loaded, the current image stays). sRGB, Display P3 and Rec.2100 PQ sources are recognized, anything else is color-managed by the
   browser.
 - The viewer shows two images side by side: the **original** file and the **HDR** output (Rec.2100 PQ with
   `rec2100-pq.icc`). Hovering either of them reads the same pixel from both.
@@ -34,7 +34,7 @@ npx ng build --base-href /some/path/   # when hosting below a sub-path
 
 | Path                                    | Role                                                                                                                                                                                  |
 |-----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `src/app/`                              | Angular only. `state/` holds the signal stores and the worker gateway; `viewer/`, `sources/`, `adjust/`, `controls/`, `histogram/` hold the components; `testing/` holds spec helpers |
+| `src/app/`                              | Angular only. `state/` holds the signal stores and the worker gateway; `viewer/`, `image/`, `adjust/`, `controls/`, `histogram/` hold the components; `testing/` holds spec helpers |
 | `src/lib/`                              | Plain TypeScript without any Angular import, so it runs unchanged in the worker and in Node                                                                                           |
 | `src/lib/color/`                        | sRGB / PQ transfer functions, primaries matrices, SDR→HDR adjustments, BT.2390 tone mapping, downscaling, histogram                                                                   |
 | `src/lib/png/`                          | PNG chunk layer, color chunks (`cICP`, `iCCP`, `cLLi`, `mDCv`), streaming 8/16-bit encoder with adaptive filtering, decoder (on top of `fast-png`)                                    |
@@ -45,7 +45,7 @@ npx ng build --base-href /some/path/   # when hosting below a sub-path
 
 ### How the Angular side is built
 
-- **Signals all the way.** `WorkspaceStore` (files, selection, adjustments) → `PreviewStore` (`debounced()` +
+- **Signals all the way.** `WorkspaceStore` (the image and its adjustments) → `PreviewStore` (`debounced()` +
   `resource()` render, object URLs released in an `effect` cleanup) → components. `InspectorStore` and
   `DownloadStore` follow the same pattern. The app is zoneless; nothing calls change detection by hand.
 - **One door to the worker.** `PipelineGateway` is the only class that knows there is a worker. Renders queue behind

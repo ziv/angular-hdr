@@ -1,10 +1,10 @@
 import { Component, inject, signal } from '@angular/core';
 import { AdjustPanel } from './adjust/adjust-panel';
 import { LuminanceHistogram } from './histogram/luminance-histogram';
+import { ImagePicker } from './image/image-picker';
 import { AppHeader } from './shell/app-header';
 import { InspectorReadout } from './shell/inspector-readout';
 import { StatusLine } from './shell/status-line';
-import { SourceList } from './sources/source-list';
 import { PreviewStore } from './state/preview-store';
 import { WorkspaceStore } from './state/workspace-store';
 import { Viewer } from './viewer/viewer';
@@ -18,11 +18,11 @@ const draggedFiles = (event: DragEvent) => Boolean(event.dataTransfer?.types.inc
     Viewer,
     StatusLine,
     InspectorReadout,
-    SourceList,
+    ImagePicker,
     AdjustPanel,
     LuminanceHistogram,
   ],
-  // Files can be dropped or pasted anywhere on the page, so these listen on the window.
+  // An image can be dropped or pasted anywhere on the page, so these listen on the window.
   host: {
     '(window:dragover)': 'onDragOver($event)',
     '(window:dragleave)': 'onDragLeave($event)',
@@ -38,7 +38,7 @@ const draggedFiles = (event: DragEvent) => Boolean(event.dataTransfer?.types.inc
       <app-inspector-readout />
 
       <div class="grid items-start gap-6 p-6 lg:grid-cols-[16rem_minmax(0,1fr)_22rem]">
-        <app-source-list />
+        <app-image-picker />
         <app-adjust-panel />
         <app-luminance-histogram
           [bins]="preview.result()?.histogram"
@@ -53,7 +53,7 @@ const draggedFiles = (event: DragEvent) => Boolean(event.dataTransfer?.types.inc
         class="pointer-events-none fixed inset-0 grid place-items-center border-4 border-dashed border-accent bg-page/85 text-2xl"
         aria-hidden="true"
       >
-        Drop PNG or JPEG files
+        Drop a PNG or JPEG image
       </div>
     }
   `,
@@ -84,11 +84,16 @@ export class App {
     if (!draggedFiles(event)) return;
     event.preventDefault();
     this.dragging.set(false);
-    void this.workspace.open(Array.from(event.dataTransfer?.files ?? []));
+    this.openFirst(event.dataTransfer?.files);
   }
 
   protected onPaste(event: ClipboardEvent): void {
-    const files = Array.from(event.clipboardData?.files ?? []);
-    if (files.length) void this.workspace.open(files);
+    this.openFirst(event.clipboardData?.files);
+  }
+
+  /** The app works on one image, so of several files only the first one is taken. */
+  private openFirst(files: FileList | undefined): void {
+    const file = files?.[0];
+    if (file) void this.workspace.open(file);
   }
 }

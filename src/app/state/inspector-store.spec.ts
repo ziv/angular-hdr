@@ -24,7 +24,7 @@ describe('InspectorStore', () => {
     workspace = TestBed.inject(WorkspaceStore);
     preview = TestBed.inject(PreviewStore);
     inspector = TestBed.inject(InspectorStore);
-    await workspace.open([testImageFile('wide.png', 40, 20)]);
+    await workspace.open(testImageFile('wide.png', 40, 20));
     await eventually(() => expect(preview.result()).toBeDefined());
   });
 

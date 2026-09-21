@@ -40,7 +40,7 @@ describe('DownloadStore', () => {
   });
 
   it('downloads the full resolution image in the requested format', async () => {
-    await workspace.open([testImageFile('photo.png', 40, 30)]);
+    await workspace.open(testImageFile('photo.png', 40, 30));
 
     const running = downloads.start('hdr');
     expect(downloads.active()).toEqual({ format: 'hdr', fraction: 0 });
@@ -63,7 +63,7 @@ describe('DownloadStore', () => {
   });
 
   it('runs one download at a time and can cancel it', async () => {
-    await workspace.open([testImageFile()]);
+    await workspace.open(testImageFile());
 
     const first = downloads.start('hdr');
     await downloads.start('sdr');

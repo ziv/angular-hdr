@@ -26,76 +26,72 @@ describe('WorkspaceStore', () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it('starts empty', () => {
-    expect(store.files()).toEqual([]);
-    expect(store.selectedFile()).toBeUndefined();
+    expect(store.file()).toBeUndefined();
     expect(store.source()).toBeUndefined();
     expect(store.baseName()).toBeUndefined();
+    expect(store.loadError()).toBeNull();
   });
 
-  it('opens files, selects the last one and keeps the errors of the others', async () => {
-    const broken = new File([new Uint8Array([1, 2, 3, 4])], 'broken.gif');
-    await store.open([testImageFile('first.png'), broken, testImageFile('second.final.png')]);
+  it('opens an image', async () => {
+    await store.open(testImageFile('photo.final.png'));
 
-    expect(store.files().map((file) => file.meta.name)).toEqual(['first.png', 'second.final.png']);
-    expect(store.files()[0].meta).toMatchObject({ width: 24, height: 16, bitDepth: 16 });
-    expect(store.files()[0].originalUrl).toMatch(/^blob:/);
-    expect(store.selectedFile()?.meta.name).toBe('second.final.png');
-    expect(store.baseName()).toBe('second.final');
-    expect(store.loadErrors()).toEqual(['broken.gif: Only PNG and JPEG files are supported']);
+    expect(store.file()?.meta).toMatchObject({
+      name: 'photo.final.png',
+      width: 24,
+      height: 16,
+      bitDepth: 16,
+    });
+    expect(store.file()?.originalUrl).toMatch(/^blob:/);
+    expect(store.baseName()).toBe('photo.final');
     expect(store.loading()).toBeNull();
-    expect(store.source()).toEqual({ id: store.selectedId(), adjustments: DEFAULT_ADJUSTMENTS });
+    expect(store.source()).toEqual({ id: store.file()!.id, adjustments: DEFAULT_ADJUSTMENTS });
   });
 
-  it('puts the adjustments into the source and resets them', async () => {
-    await store.open([testImageFile()]);
+  it('replaces the current image and forgets the previous one everywhere', async () => {
+    await store.open(testImageFile('first.png'));
+    const first = store.file()!;
+    expect(gateway.removed).toEqual([]);
+
+    await store.open(testImageFile('second.png'));
+    expect(store.file()?.meta.name).toBe('second.png');
+    expect(store.file()?.id).not.toBe(first.id);
+    expect(urls.revoke).toHaveBeenCalledWith(first.originalUrl);
+    expect(gateway.removed).toEqual([first.id]);
+  });
+
+  it('keeps the current image when the new file cannot be loaded, and clears the error on the next success', async () => {
+    await store.open(testImageFile('good.png'));
+    const good = store.file();
+
+    await store.open(new File([new Uint8Array([1, 2, 3, 4])], 'broken.gif'));
+    expect(store.file()).toBe(good);
+    expect(store.loadError()).toBe('broken.gif: Only PNG and JPEG files are supported');
+    expect(gateway.removed).toEqual([]);
+
+    await store.open(testImageFile('next.png'));
+    expect(store.loadError()).toBeNull();
+    expect(store.file()?.meta.name).toBe('next.png');
+  });
+
+  it('keeps the adjustments across images, puts them into the source and resets them', async () => {
+    await store.open(testImageFile('a.png'));
     store.adjustments.update((current) => ({ ...current, boost: true, peakNits: 1600 }));
+    await store.open(testImageFile('b.png'));
     expect(store.source()?.adjustments).toMatchObject({ boost: true, peakNits: 1600 });
+
     store.resetAdjustments();
     expect(store.source()?.adjustments).toEqual(DEFAULT_ADJUSTMENTS);
   });
 
-  it('selects only files it knows', async () => {
-    await store.open([testImageFile('a.png'), testImageFile('b.png')]);
-    const [a, b] = store.files();
-    store.select(a.id);
-    expect(store.selectedId()).toBe(a.id);
-    store.select(999);
-    expect(store.selectedId()).toBe(a.id);
-    store.select(b.id);
-    expect(store.selectedFile()).toBe(b);
-  });
-
-  it('removes a file everywhere and hands the selection to its neighbour', async () => {
-    await store.open([testImageFile('a.png'), testImageFile('b.png'), testImageFile('c.png')]);
-    const [a, b, c] = store.files();
-
-    store.remove(a.id);
-    expect(store.selectedId()).toBe(c.id);
-    expect(urls.revoke).toHaveBeenCalledWith(a.originalUrl);
-    expect(gateway.removed).toEqual([a.id]);
-
-    store.remove(c.id);
-    expect(store.selectedId()).toBe(b.id);
-    store.remove(b.id);
-    expect(store.files()).toEqual([]);
-    expect(store.selectedId()).toBeNull();
-    expect(store.source()).toBeUndefined();
-
-    store.remove(b.id);
-    expect(gateway.removed).toEqual([a.id, c.id, b.id]);
-  });
-
   it('opens the bundled default image like any other file', async () => {
-    const image = testImageFile('ignored.png');
-    const fetchMock = vi.fn(async (_url: URL) => imageResponse(image));
+    const fetchMock = vi.fn(async (_url: URL) => imageResponse(testImageFile('ignored.png')));
     vi.stubGlobal('fetch', fetchMock);
 
     await store.loadDefault();
 
     expect(String(fetchMock.mock.calls[0][0])).toBe(new URL('default.jpeg', document.baseURI).href);
-    expect(store.files().map((file) => file.meta.name)).toEqual(['default.jpeg']);
-    expect(store.selectedFile()?.meta.name).toBe('default.jpeg');
-    expect(store.loadErrors()).toEqual([]);
+    expect(store.file()?.meta.name).toBe('default.jpeg');
+    expect(store.loadError()).toBeNull();
   });
 
   it('reports a missing default image and stays usable', async () => {
@@ -104,11 +100,11 @@ describe('WorkspaceStore', () => {
       vi.fn(async () => new Response(null, { status: 404 })),
     );
     await store.loadDefault();
-    expect(store.files()).toEqual([]);
-    expect(store.loadErrors()).toEqual(['default.jpeg: HTTP 404']);
+    expect(store.file()).toBeUndefined();
+    expect(store.loadError()).toBe('default.jpeg: HTTP 404');
 
-    await store.open([testImageFile()]);
-    expect(store.files().length).toBe(1);
-    expect(store.loadErrors()).toEqual([]);
+    await store.open(testImageFile());
+    expect(store.file()).toBeDefined();
+    expect(store.loadError()).toBeNull();
   });
 });

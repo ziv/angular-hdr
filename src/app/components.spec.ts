@@ -2,7 +2,7 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { DEFAULT_ADJUSTMENTS } from '../lib/color/adjust';
 import { AdjustPanel } from './adjust/adjust-panel';
 import { DownloadButton } from './controls/download-button';
-import { SourceList } from './sources/source-list';
+import { ImagePicker } from './image/image-picker';
 import { DownloadStore } from './state/download-store';
 import { PipelineGateway } from './state/pipeline-gateway';
 import { WorkspaceStore } from './state/workspace-store';
@@ -49,7 +49,7 @@ describe('components', () => {
     });
 
     it('shows the original next to the HDR output, each with its own download', async () => {
-      await workspace.open([testImageFile('cat.png')]);
+      await workspace.open(testImageFile('cat.png'));
       const { element } = render(Viewer);
       await eventually(() => expect(element.querySelectorAll('img').length).toBe(2));
 
@@ -61,7 +61,7 @@ describe('components', () => {
       expect(titles).toEqual(['Original', 'HDR']);
       const original = element.querySelector('a')!;
       expect(original.getAttribute('download')).toBe('cat.png');
-      expect(original.getAttribute('href')).toBe(workspace.selectedFile()!.originalUrl);
+      expect(original.getAttribute('href')).toBe(workspace.file()!.originalUrl);
       const buttons = Array.from(element.querySelectorAll('app-download-button button'));
       expect(buttons.map((button) => button.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
         'Download HDR PNG',
@@ -80,7 +80,7 @@ describe('components', () => {
     });
 
     it('shows the progress and cancels on a second click', async () => {
-      await workspace.open([testImageFile()]);
+      await workspace.open(testImageFile());
       const { fixture, button } = renderButton();
       const downloads = TestBed.inject(DownloadStore);
       expect(button.disabled).toBe(false);
@@ -98,41 +98,34 @@ describe('components', () => {
     });
   });
 
-  describe('SourceList', () => {
-    it('lists, selects and removes files', async () => {
-      await workspace.open([testImageFile('a.png'), testImageFile('b.png')]);
-      const { fixture, element } = render(SourceList);
-      const entries = () =>
-        Array.from(element.querySelectorAll<HTMLButtonElement>('button[aria-pressed]'));
-
-      expect(entries().map((button) => button.textContent?.trim())).toEqual(['a.png', 'b.png']);
-      expect(entries().map((button) => button.getAttribute('aria-pressed'))).toEqual([
-        'false',
-        'true',
-      ]);
-
-      entries()[0].click();
-      fixture.detectChanges();
-      expect(workspace.selectedFile()?.meta.name).toBe('a.png');
-      expect(entries()[0].getAttribute('aria-pressed')).toBe('true');
-
-      element.querySelector<HTMLButtonElement>('button[aria-label="Remove a.png"]')!.click();
-      fixture.detectChanges();
-      expect(entries().map((button) => button.textContent?.trim())).toEqual(['b.png']);
-    });
-
-    it('opens the picked files and shows what failed', async () => {
-      const { fixture, element } = render(SourceList);
+  describe('ImagePicker', () => {
+    function pick(element: HTMLElement, files: File[]) {
       const input = element.querySelector<HTMLInputElement>('input[type=file]')!;
-      const files = [testImageFile('picked.png'), new File(['nope'], 'notes.txt')];
       Object.defineProperty(input, 'files', { value: files, configurable: true });
       input.dispatchEvent(new Event('change'));
+      return input;
+    }
 
-      await eventually(() => expect(workspace.files().length).toBe(1));
+    it('opens the picked file as the current image', async () => {
+      const { element } = render(ImagePicker);
+      const input = pick(element, [testImageFile('picked.png')]);
+
+      await eventually(() => expect(workspace.file()?.meta.name).toBe('picked.png'));
+      expect(input.multiple).toBe(false);
+      expect(element.querySelector('[role=alert]')).toBeNull();
+    });
+
+    it('says what went wrong and leaves the current image alone', async () => {
+      await workspace.open(testImageFile('current.png'));
+      const { fixture, element } = render(ImagePicker);
+      pick(element, [new File(['nope'], 'notes.txt')]);
+
+      await eventually(() => expect(workspace.loadError()).not.toBeNull());
       fixture.detectChanges();
       expect(element.querySelector('[role=alert]')?.textContent).toContain(
         'notes.txt: Only PNG and JPEG',
       );
+      expect(workspace.file()?.meta.name).toBe('current.png');
     });
   });
 
@@ -150,7 +143,7 @@ describe('components', () => {
     }
 
     it('writes the sliders into the adjustments, converting display units', async () => {
-      await workspace.open([testImageFile()]);
+      await workspace.open(testImageFile());
       const { fixture, element } = render(AdjustPanel);
 
       move(slider(element, 'SDR white level'), 300);
@@ -169,7 +162,7 @@ describe('components', () => {
     });
 
     it('enables the knee slider only while the boost is on, and resets everything', async () => {
-      await workspace.open([testImageFile()]);
+      await workspace.open(testImageFile());
       const { fixture, element } = render(AdjustPanel);
       const knee = slider(element, 'Boost starts at');
       expect(knee.disabled).toBe(true);
@@ -192,7 +185,7 @@ describe('components', () => {
     });
 
     it('shows what is known about the file', async () => {
-      await workspace.open([testImageFile('info.png', 24, 16)]);
+      await workspace.open(testImageFile('info.png', 24, 16));
       const { element } = render(AdjustPanel);
       const info = element.querySelector('dl')!.textContent!;
       expect(info).toContain('info.png');

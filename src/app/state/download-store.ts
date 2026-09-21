@@ -32,7 +32,7 @@ export class DownloadStore {
   /** Outcome of the last download. */
   readonly message = this.messageState.asReadonly();
 
-  /** Encodes the selected image in the given format and hands it to the browser as a download. */
+  /** Encodes the image in the given format and hands it to the browser as a download. */
   async start(format: ExportFormat): Promise<void> {
     const source = this.workspace.source();
     const baseName = this.workspace.baseName();

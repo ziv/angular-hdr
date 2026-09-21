@@ -57,10 +57,10 @@ describe('App', () => {
     const sources = Array.from(element.querySelectorAll('img'), (img) => img.getAttribute('src'));
     expect(new Set(sources).size).toBe(2);
     expect(element.querySelector('main [role=status]')?.textContent).toMatch(/peak \d+ nits/);
-    expect(element.querySelector('app-source-list')?.textContent).toContain('default.jpeg');
+    expect(element.querySelector('app-file-info')?.textContent).toContain('default.jpeg');
   });
 
-  it('opens files that are dropped or pasted anywhere on the page', async () => {
+  it('replaces the image with one that is dropped or pasted anywhere on the page', async () => {
     const { element } = await renderLoaded();
     const workspace = TestBed.inject(WorkspaceStore);
     // jsdom has no DataTransfer; the handlers only need `types` and `files`
@@ -74,20 +74,19 @@ describe('App', () => {
 
     fire('dragover', 'dataTransfer', testImageFile('dropped.png'));
     TestBed.tick();
-    expect(element.textContent).toContain('Drop PNG or JPEG files');
+    expect(element.textContent).toContain('Drop a PNG or JPEG image');
 
     const drop = fire('drop', 'dataTransfer', testImageFile('dropped.png'));
     expect(drop.defaultPrevented).toBe(true);
-    await eventually(() => expect(workspace.selectedFile()?.meta.name).toBe('dropped.png'));
-    expect(element.textContent).not.toContain('Drop PNG or JPEG files');
+    await eventually(() => expect(workspace.file()?.meta.name).toBe('dropped.png'));
+    expect(element.textContent).not.toContain('Drop a PNG or JPEG image');
 
     fire('paste', 'clipboardData', testImageFile('pasted.png'));
-    await eventually(() => expect(workspace.selectedFile()?.meta.name).toBe('pasted.png'));
-    expect(workspace.files().map((file) => file.meta.name)).toEqual([
-      'default.jpeg',
-      'dropped.png',
-      'pasted.png',
-    ]);
+    await eventually(() => expect(workspace.file()?.meta.name).toBe('pasted.png'));
+    await eventually(() =>
+      expect(element.querySelector('figcaption')?.textContent).toContain('pasted.png'),
+    );
+    expect(element.querySelectorAll('img').length).toBe(2);
   });
 
   it('has no accessibility violations that axe can detect', async () => {

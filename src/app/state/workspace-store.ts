@@ -20,61 +20,54 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** Which images are loaded, which one is selected, and how it is to be converted. */
+/** The one image the app works on, and how it is to be converted. */
 @Service()
 export class WorkspaceStore {
   private readonly gateway = inject(PipelineGateway);
   private readonly document = inject(DOCUMENT);
   private nextId = 1;
 
-  private readonly filesState = signal<LoadedFile[]>([]);
-  private readonly selectedIdState = signal<number | null>(null);
-  private readonly loadErrorsState = signal<string[]>([]);
+  private readonly fileState = signal<LoadedFile | undefined>(undefined);
+  private readonly loadErrorState = signal<string | null>(null);
   private readonly loadingState = signal<string | null>(null);
 
-  readonly files = this.filesState.asReadonly();
-  readonly selectedId = this.selectedIdState.asReadonly();
-  /** One message per file of the last `open` that could not be loaded. */
-  readonly loadErrors = this.loadErrorsState.asReadonly();
+  /** The current image. Opening another one replaces it. */
+  readonly file = this.fileState.asReadonly();
+  /** Why the last `open` failed; the image that was there before stays in place. */
+  readonly loadError = this.loadErrorState.asReadonly();
   /** Name of the file that is being decoded right now. */
   readonly loading = this.loadingState.asReadonly();
-  /** The conversion settings; they apply to whichever file is selected. */
+  /** The conversion settings; they are kept when another image is opened. */
   readonly adjustments = signal<Adjustments>(DEFAULT_ADJUSTMENTS);
 
-  readonly selectedFile = computed(() =>
-    this.files().find((file) => file.id === this.selectedId()),
-  );
-
-  /** What the worker should render or export, or undefined while no file is selected. */
+  /** What the worker should render or export, or undefined while there is no image. */
   readonly source = computed<Source | undefined>(() => {
-    const file = this.selectedFile();
+    const file = this.file();
     return file && { id: file.id, adjustments: this.adjustments() };
   });
 
-  /** File name of the selected image without its extension, the stem of the download names. */
-  readonly baseName = computed(() => this.selectedFile()?.meta.name.replace(/\.[^.]+$/, ''));
+  /** File name of the image without its extension, the stem of the download name. */
+  readonly baseName = computed(() => this.file()?.meta.name.replace(/\.[^.]+$/, ''));
 
-  /** Decodes the files one after the other and selects the last one that loaded. */
-  async open(files: File[]): Promise<void> {
-    const errors: string[] = [];
-    let lastLoaded: number | undefined;
-    this.loadErrorsState.set([]);
-    for (const file of files) {
-      this.loadingState.set(file.name);
-      try {
-        const id = this.nextId++;
-        const bytes = new Uint8Array(await file.arrayBuffer());
-        const { meta, sourceLevels } = await this.gateway.load(id, file.name, bytes);
-        const loaded = { id, meta, sourceLevels, originalUrl: URL.createObjectURL(file) };
-        this.filesState.update((current) => [...current, loaded]);
-        lastLoaded = id;
-      } catch (error) {
-        errors.push(`${file.name}: ${errorMessage(error)}`);
+  /** Decodes the file and makes it the current image. If that fails, the previous image stays. */
+  async open(file: File): Promise<void> {
+    this.loadErrorState.set(null);
+    this.loadingState.set(file.name);
+    try {
+      const id = this.nextId++;
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const { meta, sourceLevels } = await this.gateway.load(id, file.name, bytes);
+      const previous = this.file();
+      this.fileState.set({ id, meta, sourceLevels, originalUrl: URL.createObjectURL(file) });
+      if (previous) {
+        URL.revokeObjectURL(previous.originalUrl);
+        this.gateway.remove(previous.id);
       }
+    } catch (error) {
+      this.loadErrorState.set(`${file.name}: ${errorMessage(error)}`);
+    } finally {
+      this.loadingState.set(null);
     }
-    this.loadingState.set(null);
-    this.loadErrorsState.set(errors);
-    if (lastLoaded !== undefined) this.selectedIdState.set(lastLoaded);
   }
 
   /** Fetches the bundled default image and opens it, so the app never starts empty. */
@@ -83,28 +76,10 @@ export class WorkspaceStore {
       const response = await fetch(new URL(DEFAULT_IMAGE, this.document.baseURI));
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
-      await this.open([new File([blob], DEFAULT_IMAGE, { type: blob.type })]);
+      await this.open(new File([blob], DEFAULT_IMAGE, { type: blob.type }));
     } catch (error) {
-      this.loadErrorsState.set([`${DEFAULT_IMAGE}: ${errorMessage(error)}`]);
+      this.loadErrorState.set(`${DEFAULT_IMAGE}: ${errorMessage(error)}`);
     }
-  }
-
-  select(id: number): void {
-    if (this.files().some((file) => file.id === id)) this.selectedIdState.set(id);
-  }
-
-  /** Forgets a file everywhere. When it was the selected one, its neighbour takes over. */
-  remove(id: number): void {
-    const files = this.files();
-    const index = files.findIndex((file) => file.id === id);
-    if (index < 0) return;
-    const remaining = files.filter((file) => file.id !== id);
-    this.filesState.set(remaining);
-    if (this.selectedId() === id) {
-      this.selectedIdState.set(remaining[Math.min(index, remaining.length - 1)]?.id ?? null);
-    }
-    URL.revokeObjectURL(files[index].originalUrl);
-    this.gateway.remove(id);
   }
 
   resetAdjustments(): void {

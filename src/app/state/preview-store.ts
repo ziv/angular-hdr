@@ -19,7 +19,7 @@ function pngUrl(png: Uint8Array<ArrayBuffer>): string {
   return URL.createObjectURL(new Blob([png], { type: 'image/png' }));
 }
 
-/** The HDR preview of the selected file, re-rendered whenever the file or the adjustments change. */
+/** The HDR preview of the image, re-rendered whenever the image or the adjustments change. */
 @Service()
 export class PreviewStore {
   private readonly gateway = inject(PipelineGateway);
@@ -34,12 +34,12 @@ export class PreviewStore {
   });
 
   private readonly hdrUrlState = signal<string | undefined>(undefined);
-  /** Object URL of the preview PNG; undefined until the first render, and again when no file is selected. */
+  /** Object URL of the preview PNG; undefined until the first render, and again when there is no image. */
   readonly hdrUrl = this.hdrUrlState.asReadonly();
 
   /**
    * The latest finished render. It stays in place while the next one is on its way, so the images
-   * do not blink on every slider move; it only goes away when there is nothing selected anymore.
+   * do not blink on every slider move; it only goes away when there is no image anymore.
    */
   private readonly resultState = linkedSignal<RenderResult | undefined, RenderResult | undefined>({
     source: () => (this.render.hasValue() ? this.render.value() : undefined),
@@ -56,8 +56,7 @@ export class PreviewStore {
     const error = this.render.error();
     if (error) return error.message;
     const result = this.result();
-    if (!result)
-      return this.workspace.selectedFile() ? 'Rendering…' : 'Open an image to get started.';
+    if (!result) return this.workspace.file() ? 'Rendering…' : 'Open an image to get started.';
 
     const { width, height, fullWidth, fullHeight, lightLevels, clippedFraction, elapsedMs } =
       result;

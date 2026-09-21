@@ -37,7 +37,7 @@ describe('PreviewStore', () => {
   });
 
   it('renders the selected file into an HDR preview', async () => {
-    await workspace.open([testImageFile()]);
+    await workspace.open(testImageFile());
     await eventually(() => expect(preview.hdrUrl()).toBeDefined());
 
     expect(preview.result()).toMatchObject({
@@ -51,7 +51,7 @@ describe('PreviewStore', () => {
   });
 
   it('renders again when the adjustments change, keeps the old preview meanwhile and releases its URL', async () => {
-    await workspace.open([testImageFile()]);
+    await workspace.open(testImageFile());
     await eventually(() => expect(preview.hdrUrl()).toBeDefined());
     const first = preview.hdrUrl()!;
     const firstPeak = preview.result()!.lightLevels.maxCll;
@@ -66,7 +66,7 @@ describe('PreviewStore', () => {
   });
 
   it('collapses a burst of changes into one render', async () => {
-    await workspace.open([testImageFile()]);
+    await workspace.open(testImageFile());
     await eventually(() => expect(gateway.renders.length).toBe(1));
 
     for (const exposureStops of [0.1, 0.2, 0.3, 0.4]) {
@@ -77,12 +77,14 @@ describe('PreviewStore', () => {
     expect(gateway.renders.length).toBe(2);
   });
 
-  it('clears the preview when the last file is removed', async () => {
-    await workspace.open([testImageFile()]);
+  it('switches to a newly opened image and forgets the previous one', async () => {
+    await workspace.open(testImageFile('first.png', 24, 16));
     await eventually(() => expect(preview.hdrUrl()).toBeDefined());
+    const firstId = workspace.file()!.id;
 
-    workspace.remove(workspace.selectedId()!);
-    await eventually(() => expect(preview.hdrUrl()).toBeUndefined());
-    expect(preview.status()).toBe('Open an image to get started.');
+    await workspace.open(testImageFile('second.png', 30, 10));
+    await eventually(() => expect(preview.result()).toMatchObject({ width: 30, height: 10 }));
+    expect(gateway.removed).toEqual([firstId]);
+    expect(gateway.renders.at(-1)?.id).toBe(workspace.file()!.id);
   });
 });
